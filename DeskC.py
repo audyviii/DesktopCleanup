@@ -1,3 +1,8 @@
+"""DesktopCleanup: preview first, move later, panic never.
+
+Messy, a folder may be. Reckless, this app must not become.
+"""
+
 import csv
 import shutil
 from dataclasses import dataclass
@@ -10,6 +15,7 @@ from tkinter import ttk
 
 IGNORED_FILE_NAMES = {"desktop.ini", "downloads.ini", "thumbs.db", ".ds_store"}
 
+# Into tidy little piles, the files shall go.
 FILE_CATEGORIES = {
     "Documents": {".doc", ".docx", ".odt", ".pdf", ".rtf", ".txt"},
     "Images": {".gif", ".jpeg", ".jpg", ".png", ".svg", ".webp"},
@@ -99,6 +105,7 @@ def scan_folder(source_folder: Path, destination_root: Path) -> list[FilePlan]:
 
     plans = []
     for item in sorted(source_folder.iterdir(), key=lambda path: path.name.lower()):
+        # System files and folders, disturb them we do not.
         if not item.is_file() or is_ignored_file(item):
             continue
         plans.append(build_file_plan(item, destination_root))
@@ -114,6 +121,7 @@ def move_files(file_plans: list[FilePlan]) -> list[MoveResult]:
             continue
 
         plan.destination.parent.mkdir(parents=True, exist_ok=True)
+        # Collision avoided, an old filename keeps its peace.
         safe_destination = make_unique_path(plan.destination)
         shutil.move(str(plan.source), str(safe_destination))
         results.append(
@@ -141,6 +149,7 @@ def write_move_log(destination_root: Path, results: list[MoveResult]) -> Path | 
         if not log_exists:
             writer.writerow(["moved_at", "category", "source", "destination"])
         for result in results:
+            # Remember the journey, future debugging will.
             writer.writerow(
                 [
                     result.moved_at,
@@ -232,6 +241,7 @@ class DesktopCleanupApp:
             messagebox.showerror("Scan failed", str(error))
             return
 
+        # First, a preview. Then, only then, the moving.
         self.tree.delete(*self.tree.get_children())
         for index, plan in enumerate(self.file_plans):
             self.tree.insert(
