@@ -10,6 +10,22 @@ class DesktopCleanupTests(unittest.TestCase):
         self.assertEqual(category_for_file(Path("report.pdf")), "Documents")
         self.assertEqual(category_for_file(Path("photo.PNG")), "Images")
 
+    def test_category_for_expanded_file_types(self):
+        expected_categories = {
+            "book.epub": "Ebooks",
+            "mockup.fig": "Design",
+            "event.ics": "Calendar Contacts",
+            "certificate.pfx": "Certificates",
+            "installer.exe": "Installers",
+            "font.woff2": "Fonts",
+            "dataset.parquet": "Data",
+            "shortcut.lnk": "Shortcuts",
+        }
+
+        for file_name, category in expected_categories.items():
+            with self.subTest(file_name=file_name):
+                self.assertEqual(category_for_file(Path(file_name)), category)
+
     def test_category_for_unknown_file_type(self):
         self.assertEqual(category_for_file(Path("backup.custom")), "Other")
 

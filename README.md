@@ -8,10 +8,15 @@ DesktopCleanup scans a folder, previews where each file will go, and moves only 
 - Choose a source folder and destination folder.
 - Preview planned file moves before anything changes.
 - Move selected files or all scanned files.
-- Sort common file types into category folders.
+- Sort a broad set of common file types into category folders.
+- Place unrecognized file types in an `Other` folder.
 - Preserve existing destination files by adding a counter such as `notes (1).txt`.
 - Skip common system files such as `desktop.ini`.
 - Write `desktop_cleanup_log.csv` in the destination folder.
+
+## Categories
+
+DesktopCleanup recognizes common formats for documents, ebooks, images, design files, spreadsheets, presentations, data files, archives, audio, video, code/config files, installers, fonts, certificates, shortcuts, calendar files, and contacts.
 
 ## Usage
 
