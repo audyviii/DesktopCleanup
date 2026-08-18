@@ -1,10 +1,48 @@
 # DesktopCleanup
-A small project to automate cleaning up files and sorting them to specific folders.
+A small Tkinter app for reviewing and organizing files from a folder such as Downloads or Desktop.
 
-This is a small project that was intended to help automate a task of maintaining my Downloads folder-- that later included Desktop.
-Initially this was just a program you click on and everything simutaneously disappears. Which, later in time, became a very simple GUI
-through Tkinter library.
+DesktopCleanup scans a folder, previews where each file will go, and moves only after confirmation. It is designed to be safer than a one-click cleanup script because it avoids hidden deletes and keeps a CSV move log.
 
-This is a project/plan to build this out to daily use. 
+## Features
 
+- Choose a source folder and destination folder.
+- Preview planned file moves before anything changes.
+- Move selected files or all scanned files.
+- Sort common file types into category folders.
+- Preserve existing destination files by adding a counter such as `notes (1).txt`.
+- Skip common system files such as `desktop.ini`.
+- Write `desktop_cleanup_log.csv` in the destination folder.
 
+## Usage
+
+Run the app:
+
+```bash
+python DeskC.py
+```
+
+Recommended workflow:
+
+1. Choose the source folder.
+2. Choose the destination folder.
+3. Click `Scan`.
+4. Review the preview table.
+5. Select files and click `Move Selected`, or click `Move All`.
+
+## Development
+
+Run syntax checks:
+
+```bash
+python -m py_compile DeskC.py
+```
+
+Run tests:
+
+```powershell
+$env:PYTHONPATH='.'; python -m unittest discover -s tests
+```
+
+## Safety Notes
+
+The app moves files but does not delete them. Still, test with a small sample folder first before using it on an important Desktop or Downloads folder.

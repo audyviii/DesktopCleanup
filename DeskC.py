@@ -1,94 +1,300 @@
-import os
-import sys
-import time
+import csv
 import shutil
-from collections import Counter
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+from tkinter import filedialog, messagebox
 import tkinter as tk
 from tkinter import ttk
 
-# Windows DPI adjustment for GUI 
-try:
-    from ctypes import windll
-    windll.shcore.SetProcessDpiAwareness(1)
-except:
-    pass
 
-FULL_PATH_TO_DESIGNATED_FOLDER = 'You put full path of folder you want to file(s) to.'
+IGNORED_FILE_NAMES = {"desktop.ini", "downloads.ini", "thumbs.db", ".ds_store"}
 
-                  # Word Processing
-file_extensions = {'.txt' : 'FULL_PATH_TO_DESIGNATED_FOLDER',
-                   '.doc' : 'FULL_PATH_TO_DESIGNATED_FOLDER',
-                  # Image Formats
-                   '.jpg' : 'FULL_PATH_TO_DESIGNATED_FOLDER',
-                   '.png' : 'FULL_PATH_TO_DESIGNATED_FOLDER',
-                   }
-
-def scan_files(main_dir):
-        global files, extensions, full_file_names
-        files = os.listdir(main_dir) 
-        if 'desktop.ini' in files: 
-                files.remove('desktop.ini')  # Prevents .ini file deletion
-        elif 'downloads.ini' in files:
-                files.remove('downloads.ini') # Prevents .ini file deletion
-        else:
-                pass
-        extensions = [] 
-        full_file_names = []
-        file_count = 0 
-        for file in files:
-                full_file_names.append(f"{main_dir}\{file}")
-                extensions.append(os.path.splitext(files[file_count])[1]) 
-                file_count += 1
-
-def organize_files():
-        global extension_List, duplicates_list, dest_folder
-        duplicates_list = dict(enumerate(extensions)) 
-        extension_List = [] 
-        dest_folder = []
-        for keys in duplicates_list:
-                extension_List.append(keys)
-                for v in extension_List:
-                        a = file_extensions.get(v)
-                        dest_folder.append(a)
-        def file_handle():                
-                for k in full_file_names: 
-                        criteria = os.path.splitext(k)[1] # takes item in list, stores variable with extension split from full path name
-                        try:
-                                if criteria in file_extensions:
-                                        path_to = file_extensions.get(criteria) 
-                                        shutil.move(k, path_to) # moves file to location based on 'criteria' (criteria = extension keys in dictionary)
-                        except shutil.Error:
-                                shutil.move(k, "PATH_TO_DUPLICATES FOLDER")
-                        except FileNotFoundError:
-                                print('You need to add this extension pre-defined dictionary structure. \n')
-                                print(criteria)
-
-        file_handle()
+FILE_CATEGORIES = {
+    "Documents": {".doc", ".docx", ".odt", ".pdf", ".rtf", ".txt"},
+    "Images": {".gif", ".jpeg", ".jpg", ".png", ".svg", ".webp"},
+    "Spreadsheets": {".csv", ".ods", ".xls", ".xlsx"},
+    "Presentations": {".odp", ".ppt", ".pptx"},
+    "Archives": {".7z", ".gz", ".rar", ".tar", ".zip"},
+    "Audio": {".aac", ".flac", ".m4a", ".mp3", ".wav"},
+    "Video": {".avi", ".mkv", ".mov", ".mp4", ".wmv"},
+    "Code": {
+        ".bat",
+        ".css",
+        ".html",
+        ".js",
+        ".json",
+        ".md",
+        ".ps1",
+        ".py",
+        ".xml",
+        ".yaml",
+        ".yml",
+    },
+}
 
 
-def clean_downloads():
-        scan_files('C:\\Users\\User\\Type_USER_Here\\Admin\\Downloads\\')
-        organize_files()
-        root.destroy()
+@dataclass(frozen=True)
+class FilePlan:
+    source: Path
+    destination: Path
+    category: str
 
 
-def clean_desktop():
-        scan_files('C:\\Users\\Type_USER_Here\\Admin\\Desktop\\')
-        organize_files()
-        root.destroy()
+@dataclass(frozen=True)
+class MoveResult:
+    source: Path
+    destination: Path
+    category: str
+    moved_at: str
 
 
-root = tk.Tk()
-root.resizable(False, False)
-root.columnconfigure(0, weight=1)
+def get_default_source() -> Path:
+    downloads = Path.home() / "Downloads"
+    return downloads if downloads.exists() else Path.home()
 
-main = ttk.Frame(root, padding=(30, 15))
-main.grid()
 
-downloads = ttk.Button(main, text='Downloads', command=clean_downloads)
-downloads.grid(column=1, row=2, sticky="EW", padx=5, pady=5)
+def get_default_destination() -> Path:
+    return Path.home() / "Documents" / "DesktopCleanup Organized"
 
-desktop = ttk.Button(main, text="Desktop", command=clean_desktop)
-desktop.grid(column=0, row=1, columnspan=2, sticky="EW", padx=5, pady=5)
 
-root.mainloop()
+def category_for_file(file_path: Path) -> str:
+    extension = file_path.suffix.lower()
+    for category, extensions in FILE_CATEGORIES.items():
+        if extension in extensions:
+            return category
+    return "Other"
+
+
+def is_ignored_file(file_path: Path) -> bool:
+    return file_path.name.lower() in IGNORED_FILE_NAMES
+
+
+def make_unique_path(destination: Path) -> Path:
+    if not destination.exists():
+        return destination
+
+    counter = 1
+    while True:
+        candidate = destination.with_name(f"{destination.stem} ({counter}){destination.suffix}")
+        if not candidate.exists():
+            return candidate
+        counter += 1
+
+
+def build_file_plan(file_path: Path, destination_root: Path) -> FilePlan:
+    category = category_for_file(file_path)
+    destination = destination_root / category / file_path.name
+    return FilePlan(source=file_path, destination=destination, category=category)
+
+
+def scan_folder(source_folder: Path, destination_root: Path) -> list[FilePlan]:
+    source_folder = source_folder.expanduser().resolve()
+    destination_root = destination_root.expanduser().resolve()
+
+    if not source_folder.exists():
+        raise FileNotFoundError(f"Source folder does not exist: {source_folder}")
+    if not source_folder.is_dir():
+        raise NotADirectoryError(f"Source path is not a folder: {source_folder}")
+
+    plans = []
+    for item in sorted(source_folder.iterdir(), key=lambda path: path.name.lower()):
+        if not item.is_file() or is_ignored_file(item):
+            continue
+        plans.append(build_file_plan(item, destination_root))
+    return plans
+
+
+def move_files(file_plans: list[FilePlan]) -> list[MoveResult]:
+    results = []
+    moved_at = datetime.now().isoformat(timespec="seconds")
+
+    for plan in file_plans:
+        if not plan.source.exists():
+            continue
+
+        plan.destination.parent.mkdir(parents=True, exist_ok=True)
+        safe_destination = make_unique_path(plan.destination)
+        shutil.move(str(plan.source), str(safe_destination))
+        results.append(
+            MoveResult(
+                source=plan.source,
+                destination=safe_destination,
+                category=plan.category,
+                moved_at=moved_at,
+            )
+        )
+
+    return results
+
+
+def write_move_log(destination_root: Path, results: list[MoveResult]) -> Path | None:
+    if not results:
+        return None
+
+    destination_root.mkdir(parents=True, exist_ok=True)
+    log_path = destination_root / "desktop_cleanup_log.csv"
+    log_exists = log_path.exists()
+
+    with log_path.open("a", newline="", encoding="utf-8") as log_file:
+        writer = csv.writer(log_file)
+        if not log_exists:
+            writer.writerow(["moved_at", "category", "source", "destination"])
+        for result in results:
+            writer.writerow(
+                [
+                    result.moved_at,
+                    result.category,
+                    str(result.source),
+                    str(result.destination),
+                ]
+            )
+
+    return log_path
+
+
+class DesktopCleanupApp:
+    def __init__(self, root: tk.Tk) -> None:
+        self.root = root
+        self.root.title("Desktop Cleanup")
+        self.root.resizable(True, True)
+
+        self.source_var = tk.StringVar(value=str(get_default_source()))
+        self.destination_var = tk.StringVar(value=str(get_default_destination()))
+        self.status_var = tk.StringVar(value="Choose folders, scan, then move selected files.")
+        self.file_plans: list[FilePlan] = []
+
+        self._build_layout()
+
+    def _build_layout(self) -> None:
+        frame = ttk.Frame(self.root, padding=16)
+        frame.grid(row=0, column=0, sticky="nsew")
+
+        self.root.columnconfigure(0, weight=1)
+        self.root.rowconfigure(0, weight=1)
+        frame.columnconfigure(1, weight=1)
+        frame.rowconfigure(3, weight=1)
+
+        ttk.Label(frame, text="Source").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=4)
+        ttk.Entry(frame, textvariable=self.source_var).grid(row=0, column=1, sticky="ew", pady=4)
+        ttk.Button(frame, text="Browse", command=self._choose_source).grid(
+            row=0,
+            column=2,
+            padx=(8, 0),
+            pady=4,
+        )
+
+        ttk.Label(frame, text="Destination").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
+        ttk.Entry(frame, textvariable=self.destination_var).grid(row=1, column=1, sticky="ew", pady=4)
+        ttk.Button(frame, text="Browse", command=self._choose_destination).grid(
+            row=1,
+            column=2,
+            padx=(8, 0),
+            pady=4,
+        )
+
+        buttons = ttk.Frame(frame)
+        buttons.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(8, 8))
+        ttk.Button(buttons, text="Scan", command=self.scan).grid(row=0, column=0, padx=(0, 8))
+        ttk.Button(buttons, text="Move Selected", command=self.move_selected).grid(row=0, column=1, padx=(0, 8))
+        ttk.Button(buttons, text="Move All", command=self.move_all).grid(row=0, column=2)
+
+        columns = ("name", "category", "destination")
+        self.tree = ttk.Treeview(frame, columns=columns, show="headings", selectmode="extended")
+        self.tree.heading("name", text="File")
+        self.tree.heading("category", text="Category")
+        self.tree.heading("destination", text="Destination")
+        self.tree.column("name", width=220, anchor="w")
+        self.tree.column("category", width=120, anchor="w")
+        self.tree.column("destination", width=420, anchor="w")
+        self.tree.grid(row=3, column=0, columnspan=3, sticky="nsew")
+
+        scroll = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scroll.set)
+        scroll.grid(row=3, column=3, sticky="ns")
+
+        ttk.Label(frame, textvariable=self.status_var).grid(row=4, column=0, columnspan=3, sticky="w", pady=(8, 0))
+
+    def _choose_source(self) -> None:
+        folder = filedialog.askdirectory(initialdir=self.source_var.get())
+        if folder:
+            self.source_var.set(folder)
+
+    def _choose_destination(self) -> None:
+        folder = filedialog.askdirectory(initialdir=self.destination_var.get())
+        if folder:
+            self.destination_var.set(folder)
+
+    def scan(self) -> None:
+        try:
+            self.file_plans = scan_folder(Path(self.source_var.get()), Path(self.destination_var.get()))
+        except (OSError, ValueError) as error:
+            messagebox.showerror("Scan failed", str(error))
+            return
+
+        self.tree.delete(*self.tree.get_children())
+        for index, plan in enumerate(self.file_plans):
+            self.tree.insert(
+                "",
+                "end",
+                iid=str(index),
+                values=(plan.source.name, plan.category, str(plan.destination)),
+            )
+
+        count = len(self.file_plans)
+        suffix = "s" if count != 1 else ""
+        self.status_var.set(f"Scan complete. {count} file{suffix} ready for review.")
+
+    def move_selected(self) -> None:
+        selected_ids = self.tree.selection()
+        selected_plans = [self.file_plans[int(item_id)] for item_id in selected_ids]
+        self._confirm_and_move(selected_plans)
+
+    def move_all(self) -> None:
+        self._confirm_and_move(self.file_plans)
+
+    def _confirm_and_move(self, selected_plans: list[FilePlan]) -> None:
+        if not selected_plans:
+            messagebox.showinfo("Nothing selected", "Scan files first, then select one or more files to move.")
+            return
+
+        suffix = "s" if len(selected_plans) != 1 else ""
+        confirmed = messagebox.askyesno(
+            "Confirm move",
+            f"Move {len(selected_plans)} file{suffix} to the destination folders?",
+        )
+        if not confirmed:
+            return
+
+        try:
+            results = move_files(selected_plans)
+            log_path = write_move_log(Path(self.destination_var.get()), results)
+        except OSError as error:
+            messagebox.showerror("Move failed", str(error))
+            return
+
+        self.scan()
+        detail = f" Log written to {log_path}." if log_path else ""
+        moved_suffix = "s" if len(results) != 1 else ""
+        self.status_var.set(f"Moved {len(results)} file{moved_suffix}.{detail}")
+
+
+def configure_windows_dpi() -> None:
+    try:
+        from ctypes import windll
+
+        windll.shcore.SetProcessDpiAwareness(1)
+    except (AttributeError, OSError):
+        pass
+
+
+def main() -> None:
+    configure_windows_dpi()
+    root = tk.Tk()
+    DesktopCleanupApp(root)
+    root.minsize(850, 450)
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()
