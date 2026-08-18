@@ -1,7 +1,4 @@
-"""DesktopCleanup: preview first, move later, panic never.
-
-Messy, a folder may be. Reckless, this app must not become.
-"""
+"""DesktopCleanup organizes files with a scan-first, confirm-before-moving workflow."""
 
 import csv
 import shutil
@@ -15,7 +12,6 @@ from tkinter import ttk
 
 IGNORED_FILE_NAMES = {"desktop.ini", "downloads.ini", "thumbs.db", ".ds_store"}
 
-# Into tidy little piles, the files shall go.
 FILE_CATEGORIES = {
     "Documents": {".doc", ".docx", ".odt", ".pdf", ".rtf", ".txt"},
     "Images": {".gif", ".jpeg", ".jpg", ".png", ".svg", ".webp"},
@@ -42,6 +38,8 @@ FILE_CATEGORIES = {
 
 @dataclass(frozen=True)
 class FilePlan:
+    """A planned file move shown to the user before anything changes."""
+
     source: Path
     destination: Path
     category: str
@@ -49,6 +47,8 @@ class FilePlan:
 
 @dataclass(frozen=True)
 class MoveResult:
+    """A completed file move written to the activity log."""
+
     source: Path
     destination: Path
     category: str
@@ -56,15 +56,21 @@ class MoveResult:
 
 
 def get_default_source() -> Path:
+    """Return a practical starting folder for the source picker."""
+
     downloads = Path.home() / "Downloads"
     return downloads if downloads.exists() else Path.home()
 
 
 def get_default_destination() -> Path:
+    """Return the default folder where organized files are stored."""
+
     return Path.home() / "Documents" / "DesktopCleanup Organized"
 
 
 def category_for_file(file_path: Path) -> str:
+    """Map a file extension to one of the configured destination categories."""
+
     extension = file_path.suffix.lower()
     for category, extensions in FILE_CATEGORIES.items():
         if extension in extensions:
@@ -73,10 +79,14 @@ def category_for_file(file_path: Path) -> str:
 
 
 def is_ignored_file(file_path: Path) -> bool:
+    """Return True for system files that should not appear in cleanup results."""
+
     return file_path.name.lower() in IGNORED_FILE_NAMES
 
 
 def make_unique_path(destination: Path) -> Path:
+    """Return a destination path that will not overwrite an existing file."""
+
     if not destination.exists():
         return destination
 
@@ -89,12 +99,16 @@ def make_unique_path(destination: Path) -> Path:
 
 
 def build_file_plan(file_path: Path, destination_root: Path) -> FilePlan:
+    """Create a move plan for one file without touching the filesystem."""
+
     category = category_for_file(file_path)
     destination = destination_root / category / file_path.name
     return FilePlan(source=file_path, destination=destination, category=category)
 
 
 def scan_folder(source_folder: Path, destination_root: Path) -> list[FilePlan]:
+    """Scan a folder and return planned moves for regular, non-system files."""
+
     source_folder = source_folder.expanduser().resolve()
     destination_root = destination_root.expanduser().resolve()
 
@@ -105,7 +119,6 @@ def scan_folder(source_folder: Path, destination_root: Path) -> list[FilePlan]:
 
     plans = []
     for item in sorted(source_folder.iterdir(), key=lambda path: path.name.lower()):
-        # System files and folders, disturb them we do not.
         if not item.is_file() or is_ignored_file(item):
             continue
         plans.append(build_file_plan(item, destination_root))
@@ -113,6 +126,8 @@ def scan_folder(source_folder: Path, destination_root: Path) -> list[FilePlan]:
 
 
 def move_files(file_plans: list[FilePlan]) -> list[MoveResult]:
+    """Move files from approved plans and return results for logging."""
+
     results = []
     moved_at = datetime.now().isoformat(timespec="seconds")
 
@@ -121,7 +136,6 @@ def move_files(file_plans: list[FilePlan]) -> list[MoveResult]:
             continue
 
         plan.destination.parent.mkdir(parents=True, exist_ok=True)
-        # Collision avoided, an old filename keeps its peace.
         safe_destination = make_unique_path(plan.destination)
         shutil.move(str(plan.source), str(safe_destination))
         results.append(
@@ -137,6 +151,8 @@ def move_files(file_plans: list[FilePlan]) -> list[MoveResult]:
 
 
 def write_move_log(destination_root: Path, results: list[MoveResult]) -> Path | None:
+    """Append completed moves to a CSV log and return the log path."""
+
     if not results:
         return None
 
@@ -149,7 +165,6 @@ def write_move_log(destination_root: Path, results: list[MoveResult]) -> Path | 
         if not log_exists:
             writer.writerow(["moved_at", "category", "source", "destination"])
         for result in results:
-            # Remember the journey, future debugging will.
             writer.writerow(
                 [
                     result.moved_at,
@@ -163,6 +178,8 @@ def write_move_log(destination_root: Path, results: list[MoveResult]) -> Path | 
 
 
 class DesktopCleanupApp:
+    """Tkinter interface for scanning, previewing, and moving files."""
+
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("Desktop Cleanup")
@@ -176,6 +193,8 @@ class DesktopCleanupApp:
         self._build_layout()
 
     def _build_layout(self) -> None:
+        """Build the folder inputs, action buttons, preview table, and status bar."""
+
         frame = ttk.Frame(self.root, padding=16)
         frame.grid(row=0, column=0, sticky="nsew")
 
@@ -225,23 +244,28 @@ class DesktopCleanupApp:
         ttk.Label(frame, textvariable=self.status_var).grid(row=4, column=0, columnspan=3, sticky="w", pady=(8, 0))
 
     def _choose_source(self) -> None:
+        """Open a folder picker for the source folder."""
+
         folder = filedialog.askdirectory(initialdir=self.source_var.get())
         if folder:
             self.source_var.set(folder)
 
     def _choose_destination(self) -> None:
+        """Open a folder picker for the destination folder."""
+
         folder = filedialog.askdirectory(initialdir=self.destination_var.get())
         if folder:
             self.destination_var.set(folder)
 
     def scan(self) -> None:
+        """Refresh the preview table with planned moves for the selected folder."""
+
         try:
             self.file_plans = scan_folder(Path(self.source_var.get()), Path(self.destination_var.get()))
         except (OSError, ValueError) as error:
             messagebox.showerror("Scan failed", str(error))
             return
 
-        # First, a preview. Then, only then, the moving.
         self.tree.delete(*self.tree.get_children())
         for index, plan in enumerate(self.file_plans):
             self.tree.insert(
@@ -256,14 +280,20 @@ class DesktopCleanupApp:
         self.status_var.set(f"Scan complete. {count} file{suffix} ready for review.")
 
     def move_selected(self) -> None:
+        """Move only the rows currently selected in the preview table."""
+
         selected_ids = self.tree.selection()
         selected_plans = [self.file_plans[int(item_id)] for item_id in selected_ids]
         self._confirm_and_move(selected_plans)
 
     def move_all(self) -> None:
+        """Move every file currently shown in the preview table."""
+
         self._confirm_and_move(self.file_plans)
 
     def _confirm_and_move(self, selected_plans: list[FilePlan]) -> None:
+        """Confirm the requested move operation, execute it, and refresh the preview."""
+
         if not selected_plans:
             messagebox.showinfo("Nothing selected", "Scan files first, then select one or more files to move.")
             return
@@ -290,6 +320,8 @@ class DesktopCleanupApp:
 
 
 def configure_windows_dpi() -> None:
+    """Ask Windows for DPI-aware rendering when the API is available."""
+
     try:
         from ctypes import windll
 
@@ -299,6 +331,8 @@ def configure_windows_dpi() -> None:
 
 
 def main() -> None:
+    """Start the DesktopCleanup GUI."""
+
     configure_windows_dpi()
     root = tk.Tk()
     DesktopCleanupApp(root)
